@@ -42,7 +42,7 @@ Function Process-Web()
     )
     $Ctx.Load($web.Lists);
     $Ctx.ExecuteQuery();
-    $webFolder = Generate-Site-Folder -url $web.Url;
+    $webFolder = Generate-Site-Folder -url $web.Title;
     $path = [System.IO.Path]::Combine($rootFolder, $webFolder);
     Create-Folder -folder $path;
     foreach($list in $web.Lists){
@@ -51,7 +51,10 @@ Function Process-Web()
         $ListTitle = $list.Title;
         $BaseTemplate = $list.BaseTemplate
         Write-Host "Title: $ListTitle, Template: $BaseTemplate"
-        if(($list.BaseTemplate -eq 101 ) -and ($list.Title -ne "Site Assets"))
+        if(($list.BaseTemplate -eq 101 ) `
+            -and ($list.Title -ne "Site Assets") `
+            -and ($list.Title -ne "Style Library")`
+            -and ($list.Title -ne "Form Templates"))
         {
             Get-DocumentLibraryFiles -Library $list -RootFolder $path
         }
@@ -60,8 +63,8 @@ Function Process-Web()
     $Ctx.Load($web.Webs);
     $Ctx.ExecuteQuery();
     foreach($childWeb in $web.Webs){
-    Process-Web -web $childWeb -rootFolder $path
-}
+        Process-Web -web $childWeb -rootFolder $path
+    }
     return $path;
 }
 
@@ -74,8 +77,10 @@ Function Get-AllFilesFromFolder()
     )
     #Get All Files of the Folder
     $Ctx =  $Folder.Context;
-    $Ctx.load($Folder.files);
+    $Ctx.Load($Folder);
+    $Ctx.Load($Folder.files);
     $Ctx.ExecuteQuery();
+    $RootFolder = [System.IO.Path]::Combine($RootFolder, $Folder.Name);
   
     #Get all files in Folder
     ForEach ($File in $Folder.files)
@@ -84,12 +89,12 @@ Function Get-AllFilesFromFolder()
         $fileName =$File.Name;
         $folderName =  Generate-File-Folder -fileName $fileName
         Write-Host -f Green $folderName
-        $absoluteFolderPath = [System.IO.Path]::Combine([System.IO.Path]::Combine($RootFolder, $folderName));
-        Create-Folder -folder $absoluteFolderPath
-        $latestVersionPath = [System.IO.Path]::Combine($absoluteFolderPath, $fileName);
+        $folderName = [System.IO.Path]::Combine([System.IO.Path]::Combine($RootFolder, $folderName));
+        Create-Folder -folder $folderName;
+        $latestVersionPath = [System.IO.Path]::Combine($folderName, $fileName);
         if(-Not (Test-Path $latestVersionPath))
         {
-            Get-PnPFile -Url $File.ServerRelativeUrl -Path $absoluteFolderPath -FileName $fileName -AsFile;
+            Get-PnPFile -Url $File.ServerRelativeUrl -Path $folderName -FileName $fileName -AsFile;
         }
         $versions = $File.Versions;
         $Ctx.load($versions);
@@ -97,7 +102,7 @@ Function Get-AllFilesFromFolder()
         foreach($version in $versions){
             $versionUrl = $version.Url;
             $versionFullURL = Combine-URI -uri1 $Ctx.Url -uri2 $versionUrl;
-            $targetPath = [System.IO.Path]::Combine($absoluteFolderPath ,$version.VersionLabel);
+            $targetPath = [System.IO.Path]::Combine($folderName ,$version.VersionLabel);
             Create-Folder -folder $targetPath
             $targetPath = [System.IO.Path]::Combine($targetPath,$fileName);
             if(-Not (Test-Path $targetPath)){            
@@ -115,7 +120,6 @@ Function Get-AllFilesFromFolder()
     $Ctx.Load($Folder.Folders);
     $Ctx.Load($Folder);
     $Ctx.ExecuteQuery();
-    $folderRoot = [System.IO.Path]::Combine($RootFolder, $Folder.Name)
   
     #Exclude "Forms" system folder and iterate through each folder
     ForEach($SubFolder in $Folder.Folders | Where {$_.Name -ne "Forms"})
@@ -157,8 +161,4 @@ $Ctx.Load($RootWeb.Lists);
 $Ctx.ExecuteQuery();
 $currentDirectory =Get-Location;
 $rootPath = Process-Web -web $RootWeb -rootFolder $currentDirectory;
-
-foreach($web in $RootWeb.Webs){
-    Process-Web -web $web -rootFolder $rootPath
-}
 Disconnect-PnPOnline
